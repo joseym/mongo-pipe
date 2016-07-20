@@ -1,5 +1,5 @@
 {
-  "name": "mon-dump",
+  "name": "mongo-pipe",
   "version": "0.0.5",
   "description": "Pipeable mongo dump and restore, not yet ready for external consumption",
   "main": "index.js",
