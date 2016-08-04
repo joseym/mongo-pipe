@@ -26,11 +26,14 @@ global.LOG_LEVEL = argv.verbose || parseInt(process.env.LOG_LEVEL);
 global.DEBUG = argv.debug || parseBoolean(process.env.DEBUG);
 global.log = require('./../logging.js');
 
+const path = require('path');
+const fs = require('fs');
+const ejs = require('ejs');
 const series = require('async/series');
+const forEachOf = require('async/eachOfSeries')
 const connect = require('./../connect');
 const moment = require('moment-timezone');
 const zlib = require('zlib');
-
 const AWS = require('aws-sdk');
 
 AWS.config.update({
@@ -38,27 +41,97 @@ AWS.config.update({
   secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY
 });
 
+let config_path = path.resolve(__dirname, './../config.json');
+
+try {
+  global.CONFIG = require(config_path)
+} catch (e) {
+  global.CONFIG = false;
+}
+
 let now = moment().tz("America/Los_Angeles");
 let date = now.format('YYYY-MM-DD');
 let hour = now.format('HH:mm:ss');
-let s3;
 let s3_params = {
   Bucket: process.env.AWS_S3_BUCKET
 };
 
 series([
+  // look for config
+  (callback) => {
+    if(!CONFIG){
+      log.announce('Please configure your databases.');
+      new (require('./wizard'))(function(dbs, query){
+
+        CONFIG = { databases: {} };
+        forEachOf(dbs, (db, key, cb) => {
+          CONFIG.databases[db.name] = db.url;
+          cb();
+        });
+        console.log('');
+        log.announce('Configure AWS');
+        query.prompt(this.aws_questions).then((answers) => {
+
+          if(answers.aws) {
+            CONFIG.aws = {
+              bucket: answers['aws.bucket'],
+              secret: answers['aws.secret'],
+              access: answers['aws.access']
+            }
+          } else {
+            CONFIG.aws = false;
+          }
+
+          console.log('');
+          log.announce('Set up import defaults.');
+          query.prompt(this.import_questions).then((answers) => {
+            CONFIG.restore = {
+              source: answers['restore.source'],
+              destination: answers['restore.destination']
+            }
+
+            console.log('');
+            log.announce('Set up export defaults.');
+            query.prompt(this.export_questions).then((answers) => {
+              CONFIG.dump = {
+                source: answers['dump.source'],
+                destination: answers['dump.destination']
+              }
+
+              CONFIG.databases = JSON.stringify(CONFIG.databases, null, 4);
+
+              ejs.renderFile(path.resolve(__dirname, './../templates/config.json.template'), CONFIG, {}, function(err, str){
+                if(!err){
+                  return fs.writeFile(path.resolve(__dirname, './../config.json'), str, function(err){
+                    return callback(err, JSON.parse(str));
+                  });
+                } else {
+                  return callback(err);
+                }
+              });
+
+            });
+
+          });
+
+        }, (err) => {
+          log.warn(err);
+        });
+
+      });
+    } else {
+      return callback(null, CONFIG)
+    }
+  },
   // connect
   (callback) => {
     switch (argv.source) {
       case 's3':
-        s3_params.Key = `2016-07-19/2016-07-19 14:53:35.db.gz`;
+        s3_params.Key = `2016-08-04/2016-08-04 06:16:39.db.gz`;
         return callback(null, 's3');
         break;
-      case 'production':
-        return connect(process.env.PRODUCTION_DB, 'source', callback)
-      case 'staging':
-        return connect(process.env.LOCAL_DB, 'source', callback)
-        // return connect(process.env.STAGING_DB, 'source', callback)
+      default:
+        return connect(CONFIG.databases[argv.source], 'source', callback)
     }
   },
   (callback) => {
@@ -67,22 +140,22 @@ series([
         s3_params.Key = `${date}/${date} ${hour}.db.gz`;
         return callback(null, 's3');
         break;
-      case 'production':
-        return connect.addConnection(process.env.PRODUCTION_DB, 'destination', callback)
-      case 'staging':
-        return connect.addConnection(process.env.LOCAL_DB, 'destination', callback)
-        // return connect.addConnection(process.env.STAGING_DB, 'destination', callback)
+      default:
+        return connect.addConnection(CONFIG.databases[argv.destination], 'destination', callback)
     }
   }
 ], (err, results) => {
 
+  if(err) return log.warn(err);
+  global.CONFIG = results[0];
+
   let s3 = new AWS.S3({ params: s3_params });
 
-  let source = results[0].constructor === String ?
-    results[0] : new (require('./../dump'))('source');
+  let source = results[1].constructor === String ?
+    results[1] : new (require('./../dump'))('source');
 
-  let destination = results[1].constructor === String ?
-    results[1] : new (require('./../restore'))('destination');
+  let destination = results[2].constructor === String ?
+    results[2] : new (require('./../restore'))('destination');
 
   if(source === 's3'){
     log.announce(`Importing backup from "Amazon S3" to "${argv.destination}".`)
@@ -99,7 +172,7 @@ series([
   } else {
     source.pipe(destination);
     source.on('end', () => {});
-
+    destination.on('data', (data) => {});
     destination.on('end', () => {
       process.exit(0);
     });

@@ -1,12 +1,16 @@
 require('dotenv').config({ silent: true, path: require('path').join(__dirname, './.env' ) });
+require('./_utils');
+const argv = require('yargs').argv;
+
+global.LOG_LEVEL = argv.verbose || parseInt(process.env.LOG_LEVEL);
+global.DEBUG = argv.debug || parseBoolean(process.env.DEBUG);
+global.log = require('./logging.js');
 
 const _ = require('highland');
 const moment = require('moment-timezone');
 const series = require('async/series');
 const connect = require('./connect');
 const fs = require('fs');
-
-const argv = require('yargs').argv;
 
 const url = process.env.PRODUCTION_DB;
 const local = process.env.LOCAL_DB;
@@ -22,16 +26,16 @@ AWS.config.update({
   secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY
 });
 
+let now = moment().tz("America/Los_Angeles");
+let date = now.format('YYYY-MM-DD');
+let hour = now.format('HH:mm:ss');
+
 let s3 = new AWS.S3({
   params: {
     Bucket: process.env.AWS_S3_BUCKET,
     Key: `${date}/${date} ${hour}.db.gz`
   }
 });
-
-let now = moment().tz("America/Los_Angeles");
-let date = now.format('YYYY-MM-DD');
-let hour = now.format('HH:mm:ss');
 
 
 const progress = require('progress-stream');
@@ -55,21 +59,19 @@ series([
   }
 ], (err, results) => {
 
-
-
   let backup = new (require('./dump'))('rezflow');
   backup.on('end', function(){
     console.log('done writing');
   });
-  s3.upload({ Body: backup.pipe(zlib.createGzip()) })
-    .send(function(err, data) { process.exit(0) });
+  // s3.upload({ Body: backup.pipe(zlib.createGzip()) })
+  //   .send(function(err, data) { process.exit(0) });
 
-  // let load = new (require('./restore'))('staging');
-  // load.on('data', function(data){
-  //   // console.log(data.data._id)
-  // });
-  // load.on('end', function(){
-  //   process.exit(0);
-  // });
+  let load = new (require('./restore'))('staging');
+  load.on('data', function(data){
+    console.log(data.data._id)
+  });
+  load.on('end', function(){
+    process.exit(0);
+  });
 
 });

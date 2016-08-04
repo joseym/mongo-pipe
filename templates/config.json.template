@@ -1,0 +1,23 @@
+{
+    <% if(aws){ %>
+    "aws": {
+        "bucket": "<%= aws.bucket %>",
+        "secret": "<%= aws.secret %>",
+        "access": "<%= aws.access %>"
+    },
+    <% } %>
+    "defaults": {
+        <% if(restore){ %>
+        "import": {
+            "source": "<%= restore.source %>",
+            "destination": "<%= restore.destination %>"
+        },
+        <% } if(dump) {%>
+        "export": {
+            "source": "<%= dump.source %>",
+            "destination": "<%= dump.destination %>"
+        }
+        <% } %>
+    },
+    "databases": <%- databases %>
+}
