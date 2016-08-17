@@ -3,45 +3,45 @@ try {
 } catch (e) {}
 
 require('./_utils');
-const argv = require('yargs').argv;
-
-global.LOG_LEVEL = argv.verbose || parseInt(process.env.LOG_LEVEL);
-global.DEBUG = argv.debug || parseBoolean(process.env.DEBUG);
-global.log = require('./logging.js');
-
-const _ = require('highland');
-const moment = require('moment-timezone');
-const series = require('async/series');
-const connect = require('./connect');
-const fs = require('fs');
-
-const url = process.env.PRODUCTION_DB;
-const local = process.env.LOCAL_DB;
-const staging = process.env.STAGING_DB;
-
-const bson = require('bson');
-let BSON = new bson.BSONPure.BSON();
-
-const AWS = require('aws-sdk');
-
-AWS.config.update({
-  accessKeyId: process.env.AWS_ACCESS_KEY_ID,
-  secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY
-});
-
-let now = moment().tz("America/Los_Angeles");
-let date = now.format('YYYY-MM-DD');
-let hour = now.format('HH:mm:ss');
-
-let s3 = new AWS.S3({
-  params: {
-    Bucket: process.env.AWS_S3_BUCKET,
-    Key: `${date}/${date} ${hour}.db.gz`
-  }
-});
-
-
-let zlib = require('zlib');
+// const argv = require('yargs').argv;
+//
+// global.LOG_LEVEL = argv.verbose || parseInt(process.env.LOG_LEVEL);
+// global.DEBUG = argv.debug || parseBoolean(process.env.DEBUG);
+// global.log = require('./logging.js');
+//
+// const _ = require('highland');
+// const moment = require('moment-timezone');
+// const series = require('async/series');
+// const connect = require('./connect');
+// const fs = require('fs');
+//
+// const url = process.env.PRODUCTION_DB;
+// const local = process.env.LOCAL_DB;
+// const staging = process.env.STAGING_DB;
+//
+// const bson = require('bson');
+// let BSON = new bson.BSONPure.BSON();
+//
+// const AWS = require('aws-sdk');
+//
+// AWS.config.update({
+//   accessKeyId: process.env.AWS_ACCESS_KEY_ID,
+//   secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY
+// });
+//
+// let now = moment().tz("America/Los_Angeles");
+// let date = now.format('YYYY-MM-DD');
+// let hour = now.format('HH:mm:ss');
+//
+// let s3 = new AWS.S3({
+//   params: {
+//     Bucket: process.env.AWS_S3_BUCKET,
+//     Key: `${date}/${date} ${hour}.db.gz`
+//   }
+// });
+//
+//
+// let zlib = require('zlib');
 
 module.exports = {
   export: require('./dump'),
