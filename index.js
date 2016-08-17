@@ -1,4 +1,7 @@
-require('dotenv').config({ silent: true, path: require('path').join(__dirname, './.env' ) });
+try {
+  require('dotenv').config({ silent: true, path: require('path').join(__dirname, './.env' ) });
+} catch (e) {}
+
 require('./_utils');
 const argv = require('yargs').argv;
 
