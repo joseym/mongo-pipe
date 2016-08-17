@@ -38,11 +38,12 @@ let s3 = new AWS.S3({
 });
 
 
-let prog = progress({
-  time: 100
-});
-
 let zlib = require('zlib');
+
+module.exports = {
+  export: require('./dump'),
+  import: require('./restore')
+};
 
 // series([
 //   // connect
