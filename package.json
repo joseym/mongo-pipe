@@ -1,6 +1,6 @@
 {
   "name": "mongo-pipe",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Pipeable mongo dump and restore, not yet ready for external consumption",
   "main": "index.js",
   "scripts": {
