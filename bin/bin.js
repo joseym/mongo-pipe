@@ -102,7 +102,7 @@ series([
 
               ejs.renderFile(path.resolve(__dirname, './../templates/config.json.template'), CONFIG, {}, function(err, str){
                 if(!err){
-                  return fs.writeFile(path.resolve(__dirname, './../config.json'), str, function(err){
+                  return fs.writeFile(path.resolve(process.env.PWD, './config.json'), str, function(err){
                     return callback(err, JSON.parse(str));
                   });
                 } else {
@@ -127,7 +127,7 @@ series([
   (callback) => {
     switch (argv.source) {
       case 's3':
-        s3_params.Key = `2016-08-04/2016-08-04 06:16:39.db.gz`;
+        s3_params.Key = `2016-08-17/2016-08-17 07:25:00.db.gz`;
         return callback(null, 's3');
         break;
       default:
