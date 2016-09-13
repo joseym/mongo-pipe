@@ -23,6 +23,7 @@ function _throwIfMissing(param){
 function _noop(){};
 
 const connect = (url = _throwIfMissing('url'), alias, cb = _noop) => {
+  this.pre_write = [];
   if(alias.constructor === Function) [ url, alias, cb ] = [ url, null, alias];
   if(database !== undefined){
     return cb(null, database);

@@ -15,12 +15,13 @@ const _connect = (url, callback) => {
 };
 
 let _connection;
+let pre_write = [];
 
 module.exports = class Restore {
 
   constructor(alias) {
     this.restoreStream = _.pipeline(new bs());
-    _connect((err, database, _alias) => {
+    this.test = _connect((err, database, _alias) => {
       if(!_alias) _alias = alias
       _connection = database.connections[_alias];
     })
@@ -28,6 +29,7 @@ module.exports = class Restore {
   }
 
   setIndexes(collection, indexes){
+
     eachSeries(indexes, (index, cb) => {
       if(index.name === '_id_') return setImmediate(cb);
       let key = index.key;
@@ -45,21 +47,35 @@ module.exports = class Restore {
           }
         })
       });
-    })
+    });
+
+  }
+
+  static modify(collection, obj) {
+    pre_write.push({ collection: collection, object: obj });
   }
 
   insertDocuments(collection, document){
-    _connection.collection(collection)
-      .update({ _id: document._id }, { '$set': document }, { upsert: true }, (err, saved) => {
-        if(err) {
-          console.error(err);
-          process.exit(1);
-        }
-        this.restoreStream.resume();
-      });
+    // Loops over each preinsert object and uses it to modify the document before insert
+    eachSeries(pre_write, (obj, nextModifier) => {
+      if(!obj.collection || obj.collection === collection) _.extend(obj.object, document);
+      nextModifier();
+    }, (err) => {
+
+      _connection.collection(collection)
+        .update({ _id: document._id }, { '$set': document }, { upsert: true }, (err, saved) => {
+          if(err) {
+            console.error(err);
+            process.exit(1);
+          }
+          this.restoreStream.resume();
+        });
+
+    });
   }
 
   _init(){
+    // this.preInsert = [];
 
     this.restoreStream.on('data', (data) => {
       if(data.object_type){

@@ -7,6 +7,11 @@ global.argv = process._yargs = require('yargs')
   .command('import', 'Import a data file from <source>')
   .command('export', 'Export a data file from <source>')
   .count('verbose').alias('verbose', 'v')
+  .option('modify', {
+    description: 'JSON file used to modify each document before writing',
+    alias: 'm',
+    array: true
+  })
   .option('source', {
     description: 'Location of data source or backup',
     default: 's3',
@@ -17,7 +22,7 @@ global.argv = process._yargs = require('yargs')
     default: 's3',
     alias: 'd'
   })
-  .example('import --source s3 --destination staging', 'Restore backup from s3 onto the staging db')
+  .example('import --source s3 --destination staging --modify maskEmails.json', 'Restore backup from s3 onto the staging db')
   .boolean('debug')
   .help('help')
   .argv;
@@ -127,7 +132,7 @@ series([
   (callback) => {
     switch (argv.source) {
       case 's3':
-        s3_params.Key = `2016-08-17/2016-08-17 07:25:00.db.gz`;
+        s3_params.Key = `2016-08-24/2016-08-24 15:00:05.db.gz`;
         return callback(null, 's3');
         break;
       default:
@@ -146,36 +151,55 @@ series([
   }
 ], (err, results) => {
 
-  if(err) return log.warn(err);
-  global.CONFIG = results[0];
+  let restore = require('./../restore');
+  let dump = require('./../dump');
 
-  let s3 = new AWS.S3({ params: s3_params });
+  forEachOf(argv.modify, (file, i, nextModifier) => {
+    let parseModifier = file.match(/^((\w+)?:)?(.*)/);
+    let collection = parseModifier[2];
+    let object = parseModifier[3];
+    try {
+      restore.modify(collection, JSON.parse(object));
+    } catch (e) {
+      restore.modify(collection, require(path.resolve(__dirname, '..', object)));
+    } finally {
+      nextModifier();
+    }
+  }, () => {
 
-  let source = results[1].constructor === String ?
-    results[1] : new (require('./../dump'))('source');
+    if(err) return log.warn(err);
 
-  let destination = results[2].constructor === String ?
-    results[2] : new (require('./../restore'))('destination');
+    global.CONFIG = results[0];
 
-  if(source === 's3'){
-    log.announce(`Importing backup from "Amazon S3" to "${argv.destination}".`)
-    source = s3.getObject().createReadStream().pipe(zlib.createGunzip());
-  } else {
-    log.announce(`Exporting "${argv.source}" database to "${argv.destination}".`)
-  }
+    let s3 = new AWS.S3({ params: s3_params });
 
-  if(destination === 's3'){
-    s3.upload({ Body: source.pipe(zlib.createGzip()) })
+    let source = results[1].constructor === String ?
+    results[1] : new dump('source');
+
+    let destination = results[2].constructor === String ?
+    results[2] : new restore('destination');
+
+    if(source === 's3'){
+      log.announce(`Importing backup from "Amazon S3" to "${argv.destination}".`)
+      source = s3.getObject().createReadStream().pipe(zlib.createGunzip());
+    } else {
+      log.announce(`Exporting "${argv.source}" database to "${argv.destination}".`)
+    }
+
+    if(destination === 's3'){
+      s3.upload({ Body: source.pipe(zlib.createGzip()) })
       .send((err, data) => {
         process.exit(0);
       });
-  } else {
-    source.pipe(destination);
-    source.on('end', () => {});
-    destination.on('data', (data) => {});
-    destination.on('end', () => {
-      process.exit(0);
-    });
-  }
+    } else {
+      source.pipe(destination);
+      source.on('end', () => {});
+      destination.on('data', (data) => {});
+      destination.on('end', () => {
+        process.exit(0);
+      });
+    }
+  })
+
 
 })
