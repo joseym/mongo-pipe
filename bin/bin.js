@@ -132,7 +132,7 @@ series([
   (callback) => {
     switch (argv.source) {
       case 's3':
-        s3_params.Key = `2016-08-24/2016-08-24 15:00:05.db.gz`;
+        s3_params.Key = `2016-09-13 23:00:04.db.gz`;
         return callback(null, 's3');
         break;
       default:
@@ -150,6 +150,17 @@ series([
     }
   }
 ], (err, results) => {
+
+  let start = moment();
+
+  function duration_from_seconds(time){
+    return {
+      days: Math.floor((((time / 60) / 60) / 24) % 60),
+      hours: Math.floor(((time / 60) / 60) % 60),
+      minutes: Math.floor(((time / 60)) % 60),
+      seconds: Math.floor(time % 60)
+    }
+  }
 
   let restore = require('./../restore');
   let dump = require('./../dump');
@@ -196,10 +207,19 @@ series([
       source.on('end', () => {});
       destination.on('data', (data) => {});
       destination.on('end', () => {
+
+        let seconds = Math.floor(moment().diff(start) / 1000);
+        let duration = duration_from_seconds(seconds);
+        let duration_message = "";
+        if(duration.days) duration_message += `${duration.days} days, `;
+        if(duration.hours) duration_message += `${duration.hours} hours, `;
+        if(duration.minutes) duration_message += `${duration.minutes} minutes, `;
+        if(duration.seconds) duration_message += duration_message !== "" ? `and ${duration.seconds} seconds` : `${duration.seconds} seconds`;
+        log.announce(duration_message);
         process.exit(0);
+
       });
     }
   })
-
 
 })

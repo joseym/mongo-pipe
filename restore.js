@@ -14,6 +14,11 @@ const _connect = (url, callback) => {
   })
 };
 
+const cluster = require('cluster');
+const os = require('os');
+
+let active = {};
+
 let _connection;
 let pre_write = [];
 
@@ -35,6 +40,9 @@ module.exports = class Restore {
       let key = index.key;
       delete index.ns;
       delete index.key;
+      delete index.safe;
+      delete index.required;
+      delete index.index;
       _connection.collection(collection, (err, col) => {
         if(err) {
           console.error(err);
@@ -42,7 +50,7 @@ module.exports = class Restore {
         }
         col.ensureIndex(key, index, (indexErr, inserted) => {
           if(indexErr) {
-            console.error(indexErr);
+            console.error(indexErr, index, key);
             process.exit(1);
           }
         })
@@ -57,25 +65,38 @@ module.exports = class Restore {
 
   insertDocuments(collection, document){
     // Loops over each preinsert object and uses it to modify the document before insert
-    eachSeries(pre_write, (obj, nextModifier) => {
-      if(!obj.collection || obj.collection === collection) _.extend(obj.object, document);
-      nextModifier();
-    }, (err) => {
+    let cpus = 0;
+    if(cpus && cpus > 0 && cluster.isMaster){
 
-      _connection.collection(collection)
-        .update({ _id: document._id }, { '$set': document }, { upsert: true }, (err, saved) => {
-          if(err) {
-            console.error(err);
-            process.exit(1);
-          }
-          this.restoreStream.resume();
-        });
+      for (var i = 0; i < cpus; i++) {
+        cluster.fork();
+      }
 
-    });
+      cluster.on('exit', (worker, code, signal) => {
+        console.log(`worker ${worker.process.pid} died`);
+      });
+
+    } else {
+
+      eachSeries(pre_write, (obj, nextModifier) => {
+        if(!obj.collection || obj.collection === collection) _.extend(obj.object, document);
+        nextModifier();
+      }, (err) => {
+
+        _connection.collection(collection)
+          .update({ _id: document._id }, { '$set': document }, { upsert: true }, (err, saved) => {
+            if(err) {
+              console.error(err);
+              process.exit(1);
+            }
+            this.restoreStream.resume();
+          });
+      });
+    }
+
   }
 
   _init(){
-    // this.preInsert = [];
 
     this.restoreStream.on('data', (data) => {
       if(data.object_type){
@@ -95,7 +116,7 @@ module.exports = class Restore {
     this.restoreStream.on('error', function(err){
       _connection.close();
       console.error(err);
-    })
+    });
 
     return this.restoreStream;
 
