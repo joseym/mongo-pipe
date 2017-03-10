@@ -12,6 +12,11 @@ global.argv = process._yargs = require('yargs')
     alias: 'm',
     array: true
   })
+  .option('root', {
+    description: 'Starting path for all file requests (adding modifiers via json files)',
+    default: process.cwd(),
+    alias: 'r',
+  })
   .option('source', {
     description: 'Location of data source or backup',
     default: 's3',
@@ -172,7 +177,7 @@ series([
     try {
       restore.modify(collection, JSON.parse(object));
     } catch (e) {
-      restore.modify(collection, require(path.resolve(__dirname, '..', object)));
+      restore.modify(collection, require(path.resolve(argv.root, object)));
     } finally {
       nextModifier();
     }
